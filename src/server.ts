@@ -85,12 +85,30 @@ function decodeEntities(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
+function pickMainHtml(html: string): string {
+  const open = /<(main|article)[\s>]/i.exec(html);
+  if (!open) return html;
+  const tag = open[1].toLowerCase();
+  const end = html.toLowerCase().lastIndexOf("</" + tag);
+  if (end <= open.index) return html;
+  const part = html.slice(open.index, end);
+  return part.length >= 1000 ? part : html;
+}
+
+const REMOVE_SELECTORS = [
+  "head", "script", "style", "noscript", "svg", "iframe", "nav", "footer",
+  "aside", "form", "template", "button", "select",
+  '[role="navigation"]', '[aria-hidden="true"]',
+  ".navbox", ".vector-page-toolbar", "#p-lang-btn", ".interlanguage-link",
+  ".mw-editsection", ".mw-jump-link", ".reference", ".noprint"
+].join(", ");
+
 async function htmlToMarkdown(html: string): Promise<{ title: string; markdown: string }> {
   const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const title = titleMatch ? decodeEntities(titleMatch[1]).replace(/\s+/g, " ").trim() : "";
 
   const rewriter = new HTMLRewriter()
-    .on("head, script, style, noscript, svg, iframe, nav, footer, aside, form, template, button, select", {
+    .on(REMOVE_SELECTORS, {
       element(el) {
         el.remove();
       }
@@ -124,7 +142,7 @@ async function htmlToMarkdown(html: string): Promise<{ title: string; markdown: 
       }
     });
 
-  const cleaned = await rewriter.transform(new Response(html)).text();
+  const cleaned = await rewriter.transform(new Response(pickMainHtml(html))).text();
   const text = decodeEntities(cleaned.replace(/<[^>]+>/g, ""))
     .replace(/[ \t\f\v\u00a0]+/g, " ")
     .replace(/ *\n */g, "\n")
@@ -185,7 +203,7 @@ async function fetchOne(rawUrl: string, maxChars: number): Promise<string> {
 function createServer() {
   const server = new McpServer({
     name: "Multi MCP",
-    version: "0.2.0"
+    version: "0.2.1"
   });
 
   server.registerTool(
